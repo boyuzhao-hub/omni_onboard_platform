@@ -1,0 +1,54 @@
+x-ros-environment: &ros-env
+  ROS_DOMAIN_ID: "0"
+  RMW_IMPLEMENTATION: "rmw_cyclonedds_cpp"
+  CYCLONEDDS_URI: "file:///config/cyclonedds_profile.xml"
+  RCUTILS_CONSOLE_OUTPUT_FORMAT: "[{severity}] [{name}]: {message}"
+
+services:
+
+  # Publish the static transforms for the nissan vehicle
+  core_state:
+    image: nissan-vehicle-description:humble
+    build:
+      context: .
+      dockerfile: nissan_ros2_ws/src/vehicle_description/docker/Dockerfile
+    network_mode: host
+    ipc: host
+    environment:
+      <<: *ros-env
+    volumes:
+      - ./cyclonedds.xml:/config/cyclonedds_profile.xml:ro
+    command: ros2 launch vehicle_description state_publisher.launch.py
+    restart: unless-stopped
+
+  # Continental SC13S IMU on the same host can1 bus as radar_rear_right_link.
+  # The driver is receive-only and applies kernel filters for 0x174/178/17C.
+  sc13s_imu:
+    image: sc13s-imu:humble-ubuntu22.04
+    container_name: sc13s_imu_driver
+    build:
+      context: ./imu_ros2_ws/src/sc13s_imu_driver
+      dockerfile: docker/Dockerfile
+    network_mode: host
+    ipc: host
+    init: true
+    cap_add:
+      - NET_RAW
+    environment:
+      ROS_DOMAIN_ID: "0"
+      RMW_IMPLEMENTATION: "rmw_cyclonedds_cpp"
+      RCUTILS_CONSOLE_OUTPUT_FORMAT: "[{severity}] [{name}]: {message}"
+      AUTO_BUILD: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./imu_ros2_ws/src/sc13s_imu_driver:/root/ros2_ws/src/sc13s_imu_driver:rw
+    command:
+      - ros2
+      - launch
+      - sc13s_imu_driver
+      - sc13s_imu.launch.py
+      - input_mode:=socketcan
+      - can_interface:=can1
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 10s
