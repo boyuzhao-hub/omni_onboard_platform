@@ -1,0 +1,90 @@
+#!/bin/bash
+set -e
+
+ROS_DISTRO=${ROS_DISTRO:-humble}
+ROSBAG_OUTPUT_DIR=${ROSBAG_OUTPUT_DIR:-/data/rosbags}
+
+# docker exec does not run the container entrypoint, so source ROS here too.
+if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then
+  # shellcheck disable=SC1090
+  source "/opt/ros/${ROS_DISTRO}/setup.bash"
+else
+  echo "ROS 2 setup file not found for ${ROS_DISTRO}" >&2
+  exit 1
+fi
+
+if [ -f "/opt/rosbag_ws/install/setup.bash" ]; then
+  # shellcheck disable=SC1091
+  source /opt/rosbag_ws/install/setup.bash
+else
+  echo "Radar message overlay not found: /opt/rosbag_ws/install/setup.bash" >&2
+  exit 1
+fi
+
+if [ ! -d "${ROSBAG_OUTPUT_DIR}" ] || [ ! -w "${ROSBAG_OUTPUT_DIR}" ]; then
+  echo "Rosbag output directory is missing or not writable: ${ROSBAG_OUTPUT_DIR}" >&2
+  exit 1
+fi
+
+bag_name=${1:-dataset_$(date -u +%Y%m%dT%H%M%SZ)}
+
+if [[ "${bag_name}" == */* ]] || [ "${bag_name}" = "." ] || [ "${bag_name}" = ".." ]; then
+  echo "Bag name must be a single directory name, not a path: ${bag_name}" >&2
+  exit 2
+fi
+
+bag_path="${ROSBAG_OUTPUT_DIR}/${bag_name}"
+
+if [ -e "${bag_path}" ]; then
+  echo "Output already exists: ${bag_path}" >&2
+  echo "Choose another name or omit the name for an automatic UTC timestamp." >&2
+  exit 2
+fi
+
+# Edit this array on the host to add or remove recorded topics. The scripts
+# directory is bind-mounted into the container, so the next invocation uses
+# the saved version without rebuilding the image or restarting the container.
+topics=(
+  /gnss_rear/fix
+
+  /radar_front_left_link/cluster_list
+  /radar_front_right_link/cluster_list
+  /radar_rear_left_link/cluster_list
+  /radar_rear_right_link/cluster_list
+
+  /radar_rear_right_link/marker_array
+  /radar_rear_left_link/marker_array
+  /radar_front_left_link/marker_array
+  /radar_front_right_link/marker_array
+
+  /zed_front/zed_node/obj_det/objects
+  /zed_rear/zed_node/obj_det/objects
+  /zed_left/zed_node/obj_det/objects
+  /zed_right/zed_node/obj_det/objects
+
+  /zed_front/zed_node/rgb/color/rect/image/compressed
+  /zed_rear/zed_node/rgb/color/rect/image/compressed
+  /zed_left/zed_node/rgb/color/rect/image/compressed
+  /zed_right/zed_node/rgb/color/rect/image/compressed
+
+  /zed_front/zed_node/depth/depth_registered/compressedDepth
+  /zed_rear/zed_node/depth/depth_registered/compressedDepth
+  /zed_left/zed_node/depth/depth_registered/compressedDepth
+  /zed_right/zed_node/depth/depth_registered/compressedDepth
+
+  /zed_front/zed_node/point_cloud/cloud_registered
+  /zed_rear/zed_node/point_cloud/cloud_registered
+  /zed_left/zed_node/point_cloud/cloud_registered
+  /zed_right/zed_node/point_cloud/cloud_registered
+
+  /zed_front/zed_node/imu/data
+  /sc13s/imu/data_raw
+  
+  /tf
+  /tf_static
+)
+
+echo "Recording ${#topics[@]} topics to ${bag_path}"
+echo "Press Ctrl-C once to stop cleanly and finalize bag metadata."
+
+exec ros2 bag record -o "${bag_path}" "${topics[@]}"

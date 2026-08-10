@@ -93,6 +93,7 @@ local project root, `/mnt/nvme/Projects`.
 | `zed_ros2_ws/src/zed-ros2-wrapper` | Jetson | ZED X camera acquisition and custom multi-camera launch/URDF support | [zed-ros2-wrapper](https://github.com/boyuzhao-hub/zed-ros2-wrapper) |
 | `zed_ros2_ws/src/zed-ros2-description` | Jetson | Upstream ZED camera descriptions | [zed-ros2-description](https://github.com/stereolabs/zed-ros2-description) |
 | `zed_ros2_ws/src/zed-ros2-examples` | Jetson | Upstream ZED examples and development references | [zed-ros2-examples](https://github.com/stereolabs/zed-ros2-examples) |
+| `omni_onboard_platform/rosbag_recorder` | Integration | Passive, host-backed recording of the selected GNSS, radar, and ZED topics | Local infrastructure component |
 
 ![Software driver architecture](./docs/assets/Software_Driver_Architecture.svg)
 
@@ -104,6 +105,7 @@ local project root, `/mnt/nvme/Projects`.
 │   ├── README.md
 │   ├── cyclonedds.xml                     # Inter-computer DDS configuration
 │   ├── docker-compose.yml                 # Current integration services
+│   ├── rosbag_recorder/                   # Persistent rosbag infrastructure
 │   └── docs/
 │       ├── assets/                        # Architecture and protocol diagrams
 │       ├── datasheets/                    # Hardware specifications and manuals
@@ -118,6 +120,7 @@ local project root, `/mnt/nvme/Projects`.
 │   └── src/srr308_radar_driver/
 ├── ublox_ros2_ws/
 │   └── src/ublox_dgnss_ros2/
+├── rosbag_data/                            # Host-backed recorded datasets
 └── zed_ros2_ws/
     └── src/
         ├── zed-ros2-description/
@@ -136,6 +139,11 @@ The current [`docker-compose.yml`](./docker-compose.yml) contains two services:
   `robot_state_publisher`.
 - `sc13s_imu`: builds and launches the SC13S IMU driver on host SocketCAN
   interface `can1`.
+
+The standalone [`rosbag_recorder`](./rosbag_recorder/README.md) container is
+deployed separately from Compose. It remains idle until a recording is started
+with `docker exec`, and bind-mounts `/mnt/nvme/Projects/rosbag_data` so bags
+survive container replacement.
 
 Radar, GNSS, ZED camera, and Nissan CAN services are maintained in their
 component workspaces but have not yet been added to the integration Compose
@@ -200,4 +208,3 @@ of the integration repository.
 - Integrate and validate the ego-state fusion estimator.
 - Measure end-to-end rates, latency, timestamp alignment, and resource usage to
   verify the real-time system requirements.
-
