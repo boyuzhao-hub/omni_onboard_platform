@@ -74,7 +74,7 @@ current setup.
 | Compute | Jetson AGX Orin 64 GB | 1 | [Board specification](./docs/datasheets/Computer_Jetson_AGX_Orin_Module_Carrier_Board_Specification.pdf) |
 | Compute | Advantech ARK-2251 | 1 | [Datasheet](./docs/datasheets/Computer_ARK_2251_Datasheet.pdf) |
 | Vision | ZED X stereo camera with integrated IMU | 4 | [Datasheet](./docs/datasheets/Sensor_ZED_X_Datasheet.pdf) |
-| Radar | Continental SRR308-21 short-range radar | 4 | [Datasheet](./docs/datasheets/Sensor_SRR308_Datasheet.pdf) |
+| Radar | Continental SRR308-21 short-range radar | 4 | [Datasheet](./docs/datasheets/Sensor_SRR308_Datasheet.pdf)<br>[Interface specification](./docs/datasheets/Sensor_ARS_40X_SRR308_Interface.pdf)<br>[Short description](./docs/datasheets/Sensor_SRR308_Short_Description.pdf) |
 | Inertial | Continental SC13S six-degree-of-freedom IMU | 1 | [Datasheet](./docs/datasheets/Sensor_IMU_SC13S.pdf) |
 | Positioning and timing | u-blox ZED-F9 RTK GNSS | 2 | [Syslogic GNSS guide](./docs/datasheets/Sensor_GNSS_%20accessing_GNSS_on_Syslogic_systems.pdf) |
 
