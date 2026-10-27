@@ -1,6 +1,6 @@
 # Omni Onboard Platform
 
-**A Distributed Heterogeneous Computing Platform for Real-Time Omnidirectional Perception and Ego-State Estimation**
+**A Heterogeneous Onboard Platform for Real-Time Omnidirectional Perception and Ego-State Estimation**
 
 Omni Onboard Platform is the main integration and documentation repository for
 an onboard ROS 2 system installed on a 2012 Nissan LEAF. The platform combines
@@ -10,6 +10,13 @@ distributed system.
 
 This repository is the entry point to the complete project. The individual
 hardware drivers remain independently versioned in sibling ROS 2 workspaces.
+
+## Thesis and demo
+
+- &#128214; **Thesis:** Zhao, B. (2026). [*A Heterogeneous Onboard Platform for Real-Time Omnidirectional Perception and Ego-State Estimation*](https://research.tue.nl/en/publications/a-heterogeneous-onboard-platform-for-real-time-omnidirectional-pe/). Eindhoven University of Technology.
+- &#9654;&#65039; **[Demo video](https://youtu.be/LDkqcESuo-4?si=YXt7zGQ5bTY7jOqf)** — Watch on YouTube or click the preview below.
+
+[![Watch the Omni Onboard Platform demo](https://img.youtube.com/vi/LDkqcESuo-4/hqdefault.jpg)](https://youtu.be/LDkqcESuo-4?si=YXt7zGQ5bTY7jOqf)
 
 ## System overview
 
@@ -23,32 +30,29 @@ The platform divides work between two onboard computers:
 Both computers run ROS 2 Humble. ROS messages are exchanged through CycloneDDS
 over the onboard Ethernet network.
 
-```text
-Nissan LEAF CAN
-      │
-      ▼
-Advantech ARK-2251 (x86-64)
-      │
-      │ ROS 2 / CycloneDDS over Ethernet
-      │
-      ▼
-Jetson AGX Orin (ARM64 + GPU)
-      ├── 4 × ZED X stereo cameras
-      ├── 4 × Continental SRR308 radars
-      ├── 2 × u-blox RTK GNSS receivers
-      └── 1 × Continental SC13S IMU
-```
+![Hardware architecture: sensors, compute units, and vehicle connections](./docs/assets/Hardware_Architecture.png)
 
-![Hardware topology](./docs/assets/Hardware_Topology.drawio.svg)
+The Syslogic RML A4AGX64 houses the Jetson sensor computer. Four ZED X stereo
+cameras connect over GMSL2, while the Continental radars and SC13S IMU use
+CAN. Two GNSS antennas support positioning and timing through the u-blox
+receivers. The ARK-2251 acquires vehicle CAN signals and exchanges ROS 2
+messages with the sensor computer over Ethernet.
+
+### Electrical and data connections
+
+The topology below complements the hardware overview with the electrical and
+data connections between the vehicle, onboard computers, and sensors.
+
+![Hardware topology: electrical and data connections](./docs/assets/Hardware_Topology.drawio.svg)
 
 ## Communication and time synchronization
 
 CycloneDDS provides ROS 2 discovery and data transport between the x86 and
-ARM64 computers. The supplied [`cyclonedds.xml`](./cyclonedds.xml) uses ROS
-domain `0`, disables multicast, selects the Jetson/Syslogic-side `lan2`
+ARM64 computers. The supplied [`cyclonedds.xml`](./cyclonedds.xml) applies to any DDS domain,
+disables multicast, selects the Jetson/Syslogic-side `lan2`
 interface, and configures the ARK-2251 at `192.168.100.2` as a discovery peer.
 Interface names and peer addresses are deployment-specific and must be checked
-on each computer.
+on each computer. The Compose services set `ROS_DOMAIN_ID=0`.
 
 Clock synchronization is handled separately from DDS:
 
@@ -64,7 +68,11 @@ a common time base. See the
 [PTP configuration guide](./docs/wiki/ptp_multi_cameras_config.md) for the
 current setup.
 
-![Precision Time Protocol](./docs/assets/ptp.png)
+![Time synchronization across GNSS, onboard computers, and sensors](./docs/assets/Time_Synchronization.svg)
+
+The diagram distinguishes synchronization pulses from software timestamping.
+A shared host clock provides a common timestamp reference; sensor capture
+alignment and end-to-end timing accuracy still require validation.
 
 ## Hardware
 
@@ -78,7 +86,35 @@ current setup.
 | Inertial | Continental SC13S six-degree-of-freedom IMU | 1 | [Datasheet](./docs/datasheets/Sensor_IMU_SC13S.pdf) |
 | Positioning and timing | u-blox ZED-F9 RTK GNSS | 2 | [Syslogic GNSS guide](./docs/datasheets/Sensor_GNSS_%20accessing_GNSS_on_Syslogic_systems.pdf) |
 
+## Coordinate system and sensor frames
+
+![Vehicle coordinate system and camera, radar, and GNSS frame locations](./docs/assets/Coordinate_System.png)
+
+The vehicle reference frame, `base_link`, is located at the center of the rear
+axle. The diagram identifies the sensor frames around the vehicle:
+
+| Sensor group | Frames |
+|---|---|
+| Cameras | `front_camera_link`, `rear_camera_link`, `left_camera_link`, `right_camera_link` |
+| Radars | `radar_front_left_link`, `radar_front_right_link`, `radar_rear_left_link`, `radar_rear_right_link` |
+| GNSS | `front_gnss_link`, `rear_gnss_link` |
+
+The `vehicle_description` package defines the vehicle URDF and sensor transforms,
+which are published by `robot_state_publisher`. Use the configured URDF transforms
+for sensor offsets and orientations; the figure is a layout reference, not a
+source of calibration measurements.
+
 ## Software components
+
+![Software architecture: host services, driver containers, ROS 2 transport, and applications](./docs/assets/Software_Architecture.png)
+
+The architecture separates host services (JetPack or Ubuntu, Docker, and PTP),
+sensor and vehicle driver containers, and downstream ROS 2 applications.
+CycloneDDS carries messages between the computers, while the bag recorder
+captures selected streams for offline analysis. The application layer shows
+intended uses, including object detection, trajectory prediction, vehicle-state
+estimation, and dynamic calibration. See [Deployment status](#deployment-status)
+for the services currently included in this repository's Compose configuration.
 
 The source code is organized as multiple sibling ROS 2 workspaces under the
 local project root, `/mnt/nvme/Projects`.
@@ -92,40 +128,37 @@ local project root, `/mnt/nvme/Projects`.
 | `ublox_ros2_ws/src/ublox_dgnss_ros2` | Jetson | Dual-GNSS USB acquisition, moving-base configuration, RTK data, and high-precision fixes | [ublox_dgnss_ros2](https://github.com/boyuzhao-hub/ublox_dgnss_ros2) |
 | `zed_ros2_ws/src/zed-ros2-wrapper` | Jetson | ZED X camera acquisition and custom multi-camera launch/URDF support | [zed-ros2-wrapper](https://github.com/boyuzhao-hub/zed-ros2-wrapper) |
 | `zed_ros2_ws/src/zed-ros2-description` | Jetson | Upstream ZED camera descriptions | [zed-ros2-description](https://github.com/stereolabs/zed-ros2-description) |
-| `zed_ros2_ws/src/zed-ros2-examples` | Jetson | Upstream ZED examples and development references | [zed-ros2-examples](https://github.com/stereolabs/zed-ros2-examples) |
-| `omni_onboard_platform/rosbag_recorder` | Integration | Passive, host-backed recording of the selected GNSS, radar, and ZED topics | Local infrastructure component |
-
-![Software driver architecture](./docs/assets/Software_Driver_Architecture.svg)
+| `omni_onboard_platform/rosbag_recorder` | Integration | Passive, host-backed recording of selected GNSS, radar, ZED, IMU, and transform streams | Local infrastructure component, this repository |
 
 ## Current project layout
 
 ```text
 /mnt/nvme/Projects/
-├── omni_onboard_platform/                 # Main entry repository
-│   ├── README.md
-│   ├── cyclonedds.xml                     # Inter-computer DDS configuration
-│   ├── docker-compose.yml                 # Current integration services
-│   ├── rosbag_recorder/                   # Persistent rosbag infrastructure
-│   └── docs/
-│       ├── assets/                        # Architecture and protocol diagrams
-│       ├── datasheets/                    # Hardware specifications and manuals
-│       └── wiki/                          # Project knowledge base
-├── nissan_ros2_ws/
-│   └── src/
-│       ├── nissan_leaf_can_driver_ros2/   # Vehicle CAN stack
-│       └── vehicle_description/           # Vehicle URDF and static frames
-├── imu_ros2_ws/
-│   └── src/sc13s_imu_driver/
-├── radar_ros2_ws/
-│   └── src/srr308_radar_driver/
-├── ublox_ros2_ws/
-│   └── src/ublox_dgnss_ros2/
-├── rosbag_data/                            # Host-backed recorded datasets
-└── zed_ros2_ws/
-    └── src/
-        ├── zed-ros2-description/
-        ├── zed-ros2-examples/
-        └── zed-ros2-wrapper/
+|-- omni_onboard_platform/                 # Main entry repository
+|   |-- README.md
+|   |-- cyclonedds.xml                     # Inter-computer DDS configuration
+|   |-- docker-compose.yml                # Current integration services
+|   |-- rosbag_recorder/                   # Persistent rosbag infrastructure
+|   `-- docs/
+|       |-- assets/                        # Architecture and sensor diagrams
+|       |-- datasheets/                    # Hardware specifications and manuals
+|       `-- wiki/                          # Project knowledge base
+|-- nissan_ros2_ws/
+|   `-- src/
+|       |-- nissan_leaf_can_driver_ros2/    # Vehicle CAN stack
+|       `-- vehicle_description/           # Vehicle URDF and static frames
+|-- imu_ros2_ws/
+|   `-- src/sc13s_imu_driver/
+|-- radar_ros2_ws/
+|   `-- src/srr308_radar_driver/
+|-- ublox_ros2_ws/
+|   `-- src/ublox_dgnss_ros2/
+|-- rosbag_data/                           # Host-backed recorded datasets
+`-- zed_ros2_ws/
+    `-- src/
+        |-- zed-ros2-description/
+        |-- zed-ros2-examples/
+        `-- zed-ros2-wrapper/
 ```
 
 The workspaces are siblings of this repository; they are not contained in an
@@ -197,14 +230,3 @@ of the integration repository.
 - [ROS 2 message serialization, RMW, and DDS](./docs/wiki/ros2_message_serialization.md)
 - [Writing a URDF](./docs/wiki/write_a_urdf.md)
 - [Writing a Dockerfile](./docs/wiki/write_a_dockerfile.md)
-
-## Planned integration work
-
-- Add a repository manifest for reproducible multi-repository checkout.
-- Move or version `vehicle_description` as an integration-owned package.
-- Correct the Compose build contexts after relocation.
-- Add radar, GNSS, camera, and Nissan CAN services to Compose.
-- Add health monitoring and a unified system bring-up procedure.
-- Integrate and validate the ego-state fusion estimator.
-- Measure end-to-end rates, latency, timestamp alignment, and resource usage to
-  verify the real-time system requirements.
